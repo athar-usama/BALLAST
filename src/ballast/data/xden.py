@@ -37,6 +37,10 @@ import numpy as np
 import trimesh
 from scipy.ndimage import affine_transform, binary_fill_holes
 
+from ballast.data.xden_calib import dataset_formula_density_kg_m3, recalibrate_density_kg_m3
+from ballast.moments.operator import build_moment_operator, moments_to_inertia
+from ballast.moments.voxelgrid import VoxelGrid
+
 
 @dataclass(frozen=True)
 class XDenObject:
@@ -255,3 +259,95 @@ def register_volume_to_mesh(
         )
 
     return best, mesh_occ, pitch
+
+
+# --------------------------------------------------------------------------
+# Recalibrated ground-truth moments: resample the real LAC field into the
+# mesh's registered voxel frame, convert to density two ways (the dataset's
+# own formula, and this project's per-material recalibration), and compute
+# the resulting mass, center of mass, and inertia tensor with each -- the
+# concrete, real-data version of the density-recalibration audit.
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RecalibratedMoments:
+    grid: VoxelGrid
+    mass_dataset_kg: float
+    mass_recalibrated_kg: float
+    com_dataset_m: np.ndarray
+    com_recalibrated_m: np.ndarray
+    inertia_dataset_kgm2: np.ndarray
+    inertia_recalibrated_kgm2: np.ndarray
+
+    @property
+    def mass_overestimate_factor(self) -> float:
+        return self.mass_dataset_kg / self.mass_recalibrated_kg
+
+
+def recalibrated_moments_from_object(
+    obj: XDenObject,
+    registration: Registration,
+    mesh_occ: np.ndarray,
+    mesh_pitch: float,
+    mesh_origin_m: np.ndarray | None = None,
+    effective_kev: int = 60,
+    lac_threshold: float | None = None,
+) -> RecalibratedMoments:
+    """Resample `obj.lac_volume` into the mesh's own (registered) voxel
+    grid, convert every occupied voxel's attenuation to density both ways,
+    and return the ground-truth mass/COM/inertia each implies.
+
+    `mesh_pitch` is rescaled to real meters using `obj.size_cm` (the mesh
+    itself is unit-box normalized, not physical -- see the module
+    docstring); if `obj.size_cm` is unavailable (metadata not loaded),
+    the grid stays in the mesh's own arbitrary unit-box scale, which is
+    still valid for computing the mass_overestimate_factor RATIO (both
+    density fields scale by the same unknown volume factor, which cancels).
+    """
+    real_extent_m = obj.size_cm / 100.0 if obj.size_cm is not None and np.all(obj.size_cm > 0) else None
+    if real_extent_m is not None:
+        physical_scale = float(np.max(real_extent_m) / obj.mesh.extents.max())
+    else:
+        physical_scale = 1.0
+    pitch_m = mesh_pitch * physical_scale
+    origin_m = (mesh_origin_m if mesh_origin_m is not None else np.zeros(3)) * physical_scale
+    grid = VoxelGrid(shape=mesh_occ.shape, voxel_size_m=pitch_m, origin_m=origin_m)
+
+    # resample the CONTINUOUS lac field (not just occupancy) onto the mesh's
+    # grid via the registration's mesh_idx -> lac_idx inverse map
+    perm, scale, translation = registration.permutation, registration.scale, registration.translation
+    inv_perm = perm.T
+    matrix = inv_perm / scale
+    offset = -inv_perm @ (translation / scale)
+    resampled_lac = affine_transform(
+        obj.lac_volume, matrix=matrix, offset=offset, output_shape=mesh_occ.shape, order=1, cval=0.0
+    )
+    resampled_lac = np.where(mesh_occ, resampled_lac, 0.0)
+
+    if lac_threshold is None:
+        lac_threshold = 0.02 * max(resampled_lac.max(), 1e-12)
+    occupied = resampled_lac > lac_threshold
+    lac_values = resampled_lac[occupied]
+
+    density_dataset = np.zeros_like(resampled_lac)
+    density_dataset[occupied] = np.array([dataset_formula_density_kg_m3(v) for v in lac_values])
+
+    density_recal = np.zeros_like(resampled_lac)
+    density_recal[occupied] = np.array(
+        [recalibrate_density_kg_m3(v, obj.category, effective_kev=effective_kev) for v in lac_values]
+    )
+
+    a = build_moment_operator(grid)
+    m_ds, c_ds, i_ds = moments_to_inertia(a @ density_dataset.ravel())
+    m_re, c_re, i_re = moments_to_inertia(a @ density_recal.ravel())
+
+    return RecalibratedMoments(
+        grid=grid,
+        mass_dataset_kg=m_ds,
+        mass_recalibrated_kg=m_re,
+        com_dataset_m=c_ds,
+        com_recalibrated_m=c_re,
+        inertia_dataset_kgm2=i_ds,
+        inertia_recalibrated_kgm2=i_re,
+    )
