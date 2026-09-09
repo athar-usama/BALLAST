@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ballast"
+version = "0.1.0"
+description = "Certified bounds on the interior mass distribution of an object, from video of how it moves."
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "matplotlib>=3.8",
+  "pillow>=10.0",
+  "imageio>=2.34",
+  "imageio-ffmpeg>=0.4",
+  "trimesh>=4.0",
+  "moderngl>=5.10",
+  "nibabel>=5.2",
+  "ortools>=9.9",
+  "fast-simplification>=0.1",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.4"]
+torch = ["torch>=2.4", "torchvision>=0.19"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
