@@ -1,6 +1,14 @@
+<div align="center">
+
 # BALLAST
 
 **Certified bounds on what is inside an object, from video of how it moves.**
+
+<img alt="python" src="https://img.shields.io/badge/python-3.11%2B-blue">
+<img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-green">
+<img alt="tests" src="https://img.shields.io/badge/tests-144%20passing-brightgreen">
+
+</div>
 
 ## The patent this project disagrees with
 
@@ -24,10 +32,14 @@ This repository is what follows from taking that limit seriously instead of past
 
 <p align="center"><img src="assets/figures/chirality_twins.png" width="92%" alt="A steel spiral and its point-reflected mirror twin"></p>
 
+<div align="center">
+
 | | mass (kg) | center of mass (m) |
 |---|---|---|
 | spiral | 14.0 | (3.970e-4, 2.885e-4, 1.5e-18) |
 | its mirror twin | 14.0 | (3.970e-4, 2.885e-4, -1.5e-18) |
+
+</div>
 
 Mass differs by exactly `0.0`; center of mass differs by `3e-18` m; the full inertia tensor differs by `3e-18` kg m², both at the floor of IEEE-754 double precision.
 
@@ -130,11 +142,3 @@ python scripts/run_all.py
 Real-data figures that need the XDen-1K download are skipped automatically if `data/xden1k/` is not present; everything else, including all 144 tests, runs from this repository alone. `scripts/download_xden1k.py` fetches the real dataset (16 GB) if you want the full picture.
 
 The source tree separates cleanly along the theory: `moments/` holds the operator, the reflection theorem, and the sharp-bound linear programs; `identify/` holds the Fisher-information atlas and the SVD-based inertia solve; `physics/` and `render/` and `pose/` are the forward simulator, renderer, and pose refinement that generate and recover synthetic evidence; `data/` holds every real-anchor ingestion path; `active/` holds the goal-oriented experiment design; `rattlebox/` generates the synthetic object population these figures draw test cases from.
-
----
-
-<p align="center">
-<img alt="python" src="https://img.shields.io/badge/python-3.11%2B-blue">
-<img alt="license" src="https://img.shields.io/badge/license-Apache--2.0-green">
-<img alt="tests" src="https://img.shields.io/badge/tests-144%20passing-brightgreen">
-</p>
